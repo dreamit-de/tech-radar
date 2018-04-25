@@ -143,6 +143,30 @@ function radar_visualization(config) {
     }
   }
 
+  config.entries.length = 0;
+
+  d3.tsv("https://docs.google.com/spreadsheets/d/e/2PACX-1vTvhU6qd7pr5KfTdJfn56B-cEny2MLMkRP6FvMJzfQgYP1vPGZt8-EqJLMwr3OgG04fTrGfFYDqSyYT/pub?output=tsv", function(data) {
+      data.forEach(function (d) {
+
+          entry = {
+              quadrant : config.quadrants.findIndex( filterQuadName=>filterQuadName['name'] === d.Quadrant ),
+              ring : config.rings.findIndex( filterRingName=>filterRingName['name'] === d.Verdict ),
+              label : d.Technology,
+              active: false,
+              link: d.Link,
+              score: d.Score,
+              moved: (d.isNew === "TRUE" ? 1 : 0)
+          };
+
+          if (entry.quadrant < 0) {
+            entry.quadrant = 0;
+          }
+          if (entry.ring < 0) {
+            entry.ring = 0;
+          }
+          config.entries.push(entry);
+  });
+
   // position each entry randomly in its segment
   for (var i = 0; i < config.entries.length; i++) {
     var entry = config.entries[i];
@@ -151,7 +175,7 @@ function radar_visualization(config) {
     entry.x = point.x;
     entry.y = point.y;
     entry.color = entry.active || config.print_layout ?
-      config.rings[entry.ring].color : config.colors.inactive;
+      config.quadrants[entry.quadrant].color : config.colors.inactive;
   }
 
   // partition entries according to segments
@@ -162,6 +186,7 @@ function radar_visualization(config) {
       segmented[quadrant][ring] = [];
     }
   }
+
   for (var i=0; i<config.entries.length; i++) {
     var entry = config.entries[i];
     segmented[entry.quadrant][entry.ring].push(entry);
@@ -172,7 +197,10 @@ function radar_visualization(config) {
   for (var quadrant of [2,3,1,0]) {
     for (var ring = 0; ring < 4; ring++) {
       var entries = segmented[quadrant][ring];
-      entries.sort(function(a,b) { return a.label.localeCompare(b.label); })
+      entries.sort(function(a,b) {
+        return a.label.localeCompare(b.label);
+        //return b.score.localeCompare(a.score);
+      })
       for (var i=0; i<entries.length; i++) {
         entries[i].id = "" + id++;
       }
@@ -241,32 +269,54 @@ function radar_visualization(config) {
     }
   }
 
-  function legend_transform(quadrant, ring, index=null) {
-    var dx = ring < 2 ? 0 : 120;
-    var dy = (index == null ? -16 : index * 12);
-    if (ring % 2 == 1) {
-      dy = dy + 36 + segmented[quadrant][ring-1].length * 12;
+  function legend_transform(quadrant, ring, index=null, xOffset=0, yOffset=0) {
+    var numPrevEntries = 0;
+    var numPrevInclEntries = 0;
+    for (var r = 0; r<=ring; r++) {
+        if (r < ring) {
+            numPrevEntries += segmented[quadrant][r].length;
+        }
+        numPrevInclEntries += segmented[quadrant][r].length;
     }
+
+    var dx = 0;
+    var dy = (index == null ? 0 : (index+2) * 12);
+    dy = dy + (ring*36) + (numPrevEntries * 12);
+
+    if (dy >= 300) {
+      var rootYOffset = 0;
+      dy = dy - 300 - rootYOffset;
+      dx += 140;
+    }
+    var entry = segmented[quadrant][ring][index];
+
     return translate(
-      legend_offset[quadrant].x + dx,
-      legend_offset[quadrant].y + dy
+      legend_offset[quadrant].x + dx + xOffset,
+      legend_offset[quadrant].y + dy + yOffset
     );
   }
 
   // draw title and legend (only in print layout)
   if (config.print_layout) {
+    // logo
+    radar.append("svg:image")
+        .attr("xlink:href", "https://www.dreamit.de/img/dream-it-logo.svg")
+        .attr("transform", translate(title_offset.x, title_offset.y-50))
+        .attr("width", 147)
+        .attr("height", 52);
 
     // title
     radar.append("text")
-      .attr("transform", translate(title_offset.x, title_offset.y))
+      .attr("transform", translate(title_offset.x+160, title_offset.y))
       .text(config.title)
       .style("font-family", "Arial, Helvetica")
-      .style("font-size", "34");
+      .style("font-size", "24")
+      .style("font-weight", "bold");
 
     // footer
     radar.append("text")
       .attr("transform", translate(footer_offset.x, footer_offset.y))
-      .text("▲ moved up     ▼ moved down")
+      .text("▲ new / moved     ● no change")
       .attr("xml:space", "preserve")
       .style("font-family", "Arial, Helvetica")
       .style("font-size", "10");
@@ -279,7 +329,7 @@ function radar_visualization(config) {
           legend_offset[quadrant].x,
           legend_offset[quadrant].y - 45
         ))
-        .text(config.quadrants[quadrant].name)
+        .text(config.quadrants[quadrant].title)
         .style("font-family", "Arial, Helvetica")
         .style("font-size", "18");
       for (var ring = 0; ring < 4; ring++) {
@@ -289,15 +339,51 @@ function radar_visualization(config) {
           .style("font-family", "Arial, Helvetica")
           .style("font-size", "12")
           .style("font-weight", "bold");
-        legend.selectAll(".legend" + quadrant + ring)
-          .data(segmented[quadrant][ring])
-          .enter()
-            .append("text")
-              .attr("class", "legend" + quadrant + ring)
-              .attr("transform", function(d, i) { return legend_transform(quadrant, ring, i); })
-              .text(function(d, i) { return d.id + ". " + d.label; })
-              .style("font-family", "Arial, Helvetica")
-              .style("font-size", "11");
+
+          legend.selectAll(".legend" + quadrant + ring)
+            .data(segmented[quadrant][ring])
+            .enter()
+            .each(function (d, i) {
+
+              // just visualize legend as well
+              if (d.moved != 0) {
+                  d3.select(this).append("path")
+                    .attr("transform", legend_transform(quadrant, ring, i, 3, -5))
+                    .attr("d", "M -5,5 5,5 0,-4 z") // triangle pointing up for a "move / change" indication
+                    .style("fill", config.quadrants[quadrant].color);
+              } else {
+                  d3.select(this).append("circle")
+                    .attr("transform", legend_transform(quadrant, ring, i, 3, -5))
+                    .attr("r", 3)
+                    .attr("fill", config.quadrants[quadrant].color)
+              }
+
+              //if (d.hasOwnProperty("link")) {
+              if (d.link) {
+                  d3.select(this).append("a")
+                      .attr("xlink:href", function (d, i) {
+                          return d.link
+                      })
+                      //.attr("xlink:target","_blank") // this does not work - unfortunately, enable the following 2 lines if needed
+                      //.attr("xlink:href", "#")
+                      //.on("click", function(d, i) {  window.open(d.link); return false;})
+                      .append("text")
+                      .on("mouseover", showLink)
+                      .on("mouseout", hideLink)
+                      .attr("class", "legend" + "_" + d.id)
+                      .attr("transform", legend_transform(quadrant, ring, i, 13, 0))
+                      .text(d.id + ". " + d.label)
+                      .style("font-family", "Arial, Helvetica")
+                      .style("font-size", "11");
+              } else {
+                  d3.select(this).append("text")
+                      .attr("class", "legend" + "_" + d.id)
+                      .attr("transform", legend_transform(quadrant, ring, i, 13, 0))
+                      .text(d.id + ". " + d.label)
+                      .style("font-family", "Arial, Helvetica")
+                      .style("font-size", "11");
+              }
+            });
       }
     }
   }
@@ -328,6 +414,9 @@ function radar_visualization(config) {
 
   function showBubble(d) {
     if (d.active || config.print_layout) {
+      d3.select(this)
+          .style("cursor", "pointer");
+
       var tooltip = d3.select("#bubble text")
         .text(d.label);
       var bbox = tooltip.node().getBBox();
@@ -341,13 +430,43 @@ function radar_visualization(config) {
         .attr("height", bbox.height + 4);
       d3.select("#bubble path")
         .attr("transform", translate(bbox.width / 2 - 5, 3));
+
+      if (d.link) {
+        d3.selectAll(".legend" + "_" + d.id)
+          .style("font-weight", "bold")
+          .style("text-decoration", "underline")
+          .style("font-size", "11")
+      }
     }
   }
 
   function hideBubble(d) {
-    var bubble = d3.select("#bubble")
-      .attr("transform", translate(0,0))
+    d3.select("#bubble")
+      .attr("transform", translate(0, 0))
       .style("opacity", 0);
+
+    if (d.link) {
+      d3.selectAll(".legend" + "_" + d.id)
+        .style("font-size", "11")
+        .style("text-decoration", "none")
+        .style("font-weight", "normal");
+    }
+  }
+
+  function showLink(d) {
+    d3.select(this)
+      .style("font-weight", "bold")
+      .style("text-decoration", "underline")
+      .style("font-size", "11")
+      .style("cursor", "pointer");
+  }
+
+  function hideLink(d) {
+    d3.select(this)
+      .style("font-weight", "normal")
+      .style("text-decoration", "none")
+      .style("font-size", "11")
+      .style("cursor", "default");
   }
 
   // draw blips on radar
@@ -355,7 +474,7 @@ function radar_visualization(config) {
     .data(config.entries)
     .enter()
       .append("g")
-        .attr("class", "blip")
+        .attr("class", function(d, i) { return "blib" + "_" + d.id })
         .on("mouseover", showBubble)
         .on("mouseout", hideBubble);
 
@@ -364,9 +483,10 @@ function radar_visualization(config) {
     var blip = d3.select(this);
 
     // blip link
-    if (!config.print_layout && d.active && d.hasOwnProperty("link")) {
-      blip = blip.append("a")
-        .attr("xlink:href", d.link);
+    if (d.link) {
+        blip = blip.append("a")
+            .attr("xlink:href", d.link)
+            .attr("xlink:target", "_blank");
     }
 
     // blip shape
@@ -412,4 +532,5 @@ function radar_visualization(config) {
     .velocityDecay(0.19) // magic number (found by experimentation)
     .force("collision", d3.forceCollide().radius(12).strength(0.85))
     .on("tick", ticked);
+  });
 }

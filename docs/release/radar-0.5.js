@@ -151,7 +151,7 @@ function radar_visualization(config) {
     entry.x = point.x;
     entry.y = point.y;
     entry.color = entry.active || config.print_layout ?
-      config.rings[entry.ring].color : config.colors.inactive;
+      config.quadrant[entry.quadrant].color : config.colors.inactive;
   }
 
   // partition entries according to segments
