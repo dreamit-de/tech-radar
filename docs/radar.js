@@ -198,10 +198,13 @@ function radar_visualization(config) {
     for (var ring = 0; ring < 4; ring++) {
       var entries = segmented[quadrant][ring];
       entries.sort(function(a,b) {
-        if (b.score == null || a.score == null || b.score.localeCompare(a.score) === 0) {
+        var scoreA = parseFloat(a.score);
+        var scoreB = parseFloat(b.score);
+
+        if (isNaN(scoreA) || isNaN(scoreB) || ((scoreB - scoreA) === 0)) {
             return a.label.localeCompare(b.label);
         }
-        return b.score.localeCompare(a.score);
+        return scoreB - scoreA;
       })
       for (var i=0; i<entries.length; i++) {
         entries[i].id = "" + id++;
