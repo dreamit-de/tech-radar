@@ -2,8 +2,8 @@
 
 At [dreamIT](https://www.dreamit.de), we maintain a [public Tech
 Radar](http://zalando.github.io/tech-radar/) to help our engineering teams
-align on technology choices. Is is based on the [pioneering work
-by ThoughtWorks](https://www.thoughtworks.com/radar) and adapted from [Zalando](http://zalando.github.io/tech-radar/).
+align on technology choices. It's based on the [pioneering work
+by ThoughtWorks](https://www.thoughtworks.com/radar) and was adapted from [Zalando](http://zalando.github.io/tech-radar/).
 
 This repository contains the code to generate the visualization. Data is automatically extracted from a provided Google Stylesheet, that we maintain. Entries are positioned automatically so that they don't overlap.
 
